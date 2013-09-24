@@ -4,7 +4,7 @@
  * Simple Zip file support.
  */
 #include "safe_iop.h"
-#include <zlib.h>
+#include "zlib.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -41,7 +41,7 @@ enum {
     CENSIZ = 20,
     CENLEN = 24,
     CENNAM = 28,
-    CENEXT = 30, 
+    CENEXT = 30,
     CENCOM = 32,
     CENDSK = 34,
     CENATT = 36,
@@ -66,13 +66,13 @@ enum {
 
     LOCSIG = 0x04034b50,      // PK34
     LOCHDR = 30,
-        
+
     LOCVER =  4,
     LOCFLG =  6,
     LOCHOW =  8,
     LOCTIM = 10,
     LOCCRC = 14,
-    LOCSIZ = 18, 
+    LOCSIZ = 18,
     LOCLEN = 22,
     LOCNAM = 26,
     LOCEXT = 28,
@@ -266,8 +266,6 @@ static bool parseZipArchive(ZipArchive* pArchive, const MemMapping* pMap)
         extraLen = get2LE(ptr + CENEXT);
         commentLen = get2LE(ptr + CENCOM);
         fileName = (const char*)ptr + CENHDR;
-        
-        
         if (fileName + fileNameLen > (const char*)pMap->addr + pMap->length) {
             LOGW("Filename ran off the end (at %d)\n", i);
             goto bail;
@@ -759,7 +757,7 @@ bool mzReadZipEntry(const ZipArchive* pArchive, const ZipEntry* pEntry,
 {
     CopyProcessArgs args;
     bool ret;
-    
+
     args.buf = buf;
     args.bufLen = bufLen;
     ret = mzProcessZipEntryContents(pArchive, pEntry, copyProcessFunction,
@@ -772,15 +770,29 @@ bool mzReadZipEntry(const ZipArchive* pArchive, const ZipEntry* pEntry,
 }
 
 static bool writeProcessFunction(const unsigned char *data, int dataLen,
-        void *fd)
+                                 void *cookie)
 {
-    ssize_t n = write((int)fd, data, dataLen);
-    if (n != dataLen) {
-        LOGE("Can't write %d bytes (only %ld) from zip file: %s\n",
-                dataLen, n, strerror(errno));
-        return false;
+    int fd = (int)cookie;
+
+    ssize_t soFar = 0;
+    while (true) {
+        ssize_t n = write(fd, data+soFar, dataLen-soFar);
+        if (n <= 0) {
+            LOGE("Error writing %ld bytes from zip file from %p: %s\n",
+                 dataLen-soFar, data+soFar, strerror(errno));
+            if (errno != EINTR) {
+              return false;
+            }
+        } else if (n > 0) {
+            soFar += n;
+            if (soFar == dataLen) return true;
+            if (soFar > dataLen) {
+                LOGE("write overrun?  (%ld bytes instead of %d)\n",
+                     soFar, dataLen);
+                return false;
+            }
+        }
     }
-    return true;
 }
 
 /*
@@ -790,13 +802,50 @@ bool mzExtractZipEntryToFile(const ZipArchive *pArchive,
     const ZipEntry *pEntry, int fd)
 {
     bool ret = mzProcessZipEntryContents(pArchive, pEntry, writeProcessFunction,
-            (void *)fd);
+                                         (void*)fd);
     if (!ret) {
         LOGE("Can't extract entry to file.\n");
         return false;
     }
     return true;
 }
+
+typedef struct {
+    unsigned char* buffer;
+    long len;
+} BufferExtractCookie;
+
+static bool bufferProcessFunction(const unsigned char *data, int dataLen,
+    void *cookie) {
+    BufferExtractCookie *bec = (BufferExtractCookie*)cookie;
+
+    memmove(bec->buffer, data, dataLen);
+    bec->buffer += dataLen;
+    bec->len -= dataLen;
+
+    return true;
+}
+
+/*
+ * Uncompress "pEntry" in "pArchive" to buffer, which must be large
+ * enough to hold mzGetZipEntryUncomplen(pEntry) bytes.
+ */
+bool mzExtractZipEntryToBuffer(const ZipArchive *pArchive,
+    const ZipEntry *pEntry, unsigned char *buffer)
+{
+    BufferExtractCookie bec;
+    bec.buffer = buffer;
+    bec.len = mzGetZipEntryUncompLen(pEntry);
+
+    bool ret = mzProcessZipEntryContents(pArchive, pEntry,
+        bufferProcessFunction, (void*)&bec);
+    if (!ret || bec.len != 0) {
+        LOGE("Can't extract entry to memory buffer.\n");
+        return false;
+    }
+    return true;
+}
+
 
 /* Helper state to make path translation easier and less malloc-happy.
  */
@@ -881,7 +930,8 @@ static const char *targetEntryPath(MzPathHelper *helper, ZipEntry *pEntry)
 bool mzExtractRecursive(const ZipArchive *pArchive,
                         const char *zipDir, const char *targetDir,
                         int flags, const struct utimbuf *timestamp,
-                        void (*callback)(const char *fn, void *), void *cookie)
+                        void (*callback)(const char *fn, void *), void *cookie,
+                        struct selabel_handle *sehnd)
 {
     if (zipDir[0] == '/') {
         LOGE("mzExtractRecursive(): zipDir must be a relative path.\n");
@@ -996,7 +1046,7 @@ bool mzExtractRecursive(const ZipArchive *pArchive,
         if (pEntry->fileName[pEntry->fileNameLen-1] == '/') {
             if (!(flags & MZ_EXTRACT_FILES_ONLY)) {
                 int ret = dirCreateHierarchy(
-                        targetFile, UNZIP_DIRMODE, timestamp, false);
+                        targetFile, UNZIP_DIRMODE, timestamp, false, sehnd);
                 if (ret != 0) {
                     LOGE("Can't create containing directory for \"%s\": %s\n",
                             targetFile, strerror(errno));
@@ -1010,7 +1060,7 @@ bool mzExtractRecursive(const ZipArchive *pArchive,
              * the containing directory exists.
              */
             int ret = dirCreateHierarchy(
-                    targetFile, UNZIP_DIRMODE, timestamp, true);
+                    targetFile, UNZIP_DIRMODE, timestamp, true, sehnd);
             if (ret != 0) {
                 LOGE("Can't create containing directory for \"%s\": %s\n",
                         targetFile, strerror(errno));
@@ -1064,7 +1114,21 @@ bool mzExtractRecursive(const ZipArchive *pArchive,
                 /* The entry is a regular file.
                  * Open the target for writing.
                  */
+
+                char *secontext = NULL;
+
+                if (sehnd) {
+                    selabel_lookup(sehnd, &secontext, targetFile, UNZIP_FILEMODE);
+                    setfscreatecon(secontext);
+                }
+
                 int fd = creat(targetFile, UNZIP_FILEMODE);
+
+                if (secontext) {
+                    freecon(secontext);
+                    setfscreatecon(NULL);
+                }
+
                 if (fd < 0) {
                     LOGE("Can't create target file \"%s\": %s\n",
                             targetFile, strerror(errno));
