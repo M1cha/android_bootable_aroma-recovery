@@ -482,7 +482,7 @@ void alangd_set(char * key, char * val);
 //
 // AROMA Zip Functions
 //
-byte      az_init(const char * filename);                               // Init Zip Archive
+byte      az_init(const char * filename, int filesystem);               // Init Zip Archive
 void      az_close();                                                   // Release Zip Archive
 byte      az_readmem(AZMEM * out, const char * zpath, byte bytesafe);   // Read Zip Item into Memory
 byte      az_extract(const char * zpath, const char * dest);            // Extract Zip Item into Filesystem
