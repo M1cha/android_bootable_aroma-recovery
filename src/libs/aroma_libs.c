@@ -454,18 +454,12 @@ int akinetic_fling_dampered(AKINETIC * p, float dampersz) {
 byte isnodelete(const char * path) {
   byte ret = 0;
   char * real_source  = realpath(path, NULL);
-  char * real_zip     = realpath(getArgv(1), NULL);
   
   if (ismounted(real_source)) {
     ret = 1;
     goto done;
   }
-  
-  if (strcmp(real_source, real_zip) == 0) {
-    ret = 1;
-    goto done;
-  }
-  
+
   if (strcmp(real_source, "/tmp/update-binary") == 0) {
     ret = 1;
     goto done;
@@ -477,7 +471,6 @@ byte isnodelete(const char * path) {
   }
   
 done:
-  free(real_zip);
   free(real_source);
   return ret;
 }

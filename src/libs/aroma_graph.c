@@ -3179,7 +3179,7 @@ void ag_takescreenshoot() {
   char filename[256];
   
   do {
-    snprintf(filename, 256, "%s.screenshoot-%i.bmp", getArgv(1), ag_takescreenshoot_n++);
+    snprintf(filename, 256, SCREENSHOT_PATH "screenshoot-%i.bmp",  ag_takescreenshoot_n++);
   }
   while (file_exists(filename));
   

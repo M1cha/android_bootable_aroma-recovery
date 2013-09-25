@@ -95,6 +95,8 @@
 #define AROMA_FRAMEBUFFER         "/dev/graphics/fb0"
 #define AROMA_THEME_CNT           24
 #define MAX_FILE_GETPROP_SIZE     65536
+#define AROMA_CFG                 "/cache/recovery/aroma.cfg"
+#define SCREENSHOT_PATH           "/cache/recovery/"
 
 
 //-- CALIB MATRIX
@@ -463,7 +465,6 @@ typedef struct {
 FILE   *  apipe();        // Recovery pipe to communicate the command
 char   *  aui_readfromfs(char * name);
 char   *  aui_readfromzip(char * name);
-char   *  getArgv(int id);
 byte      aui_start();
 
 //

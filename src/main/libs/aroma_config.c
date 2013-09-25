@@ -404,12 +404,10 @@ void aui_cfg_fromarray() {
 }
 
 void aui_cfg_savechange() {
-  char cfgname[256];
-  snprintf(cfgname, 256, "%s.cfg", getArgv(1));
   char * buf = aui_cfg_build(aui_cfg_array);
   
   if (buf) {
-    aui_writetofs(cfgname, buf);
+    aui_writetofs(AROMA_CFG, buf);
     free(buf);
   }
 }
@@ -436,9 +434,7 @@ void aui_cfg_save() {
 
 void aui_cfg_loadcfg() {
   aui_cfg_array = aarray_create();
-  char cfgname[256];
-  snprintf(cfgname, 256, "%s.cfg", getArgv(1));
-  char * buf = aui_readfromfs(cfgname);
+  char * buf = aui_readfromfs(AROMA_CFG);
   
   if (buf == NULL) {
     aui_cfg_save();

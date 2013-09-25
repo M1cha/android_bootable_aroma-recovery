@@ -1,4 +1,3 @@
-
 /*
  * Copyright (C) 2011 Ahmad Amarullah ( http://amarullz.com/ )
  *
@@ -31,8 +30,6 @@
 //* GLOBAL UI VARIABLES
 //*
 static  FILE  * acmd_pipe;
-static  int     parent_pid = 0;
-static  char    currArgv[2][256];
 
 //*
 //* Pass Recovery PIPE
@@ -42,18 +39,10 @@ FILE * apipe() {
 }
 
 //*
-//* Get Command Argument
-//*
-char * getArgv(int id) {
-  return currArgv[id];
-}
-
-//*
 //* Show Text Splash
 //*
-void a_splash(char * spipe) {
-  int fd      = atoi(spipe);
-  acmd_pipe   = fdopen(fd, "wb");
+void a_splash() {
+  acmd_pipe   = stdout;
   setlinebuf(acmd_pipe);
   //#-- Print Info Into Recovery
   fprintf(apipe(), "ui_print\n");
@@ -104,9 +93,8 @@ int main(int argc, char ** argv) {
   remove_directory("/tmp/aroma-memory");
   aroma_memory_debug_init();
 #endif
-  //* PARENT PID
+
   int retval = 1;
-  parent_pid = getppid();
   LOGS("Initializing\n");
   //* Normal Updater Sequences
   setbuf(stdout, NULL);
@@ -115,38 +103,15 @@ int main(int argc, char ** argv) {
   remove_directory(AROMA_TMP);
   create_directory(AROMA_TMP);
   
-  //* Check Arguments
-  if (argc != 4) {
-    LOGE("Unexpected Number of Arguments (%d)\n", argc);
-    return 1;
-  }
-  
-  //* Check CWM Version
-  if ((argv[1][0] != '1' && argv[1][0] != '2' && argv[1][0] != '3') || argv[1][1] != '\0') {
-    LOGE("Wrong Updater Binary API!!! Expected 1, 2, or 3, But got %s\n", argv[1]);
-    return 2;
-  }
-  
-  //* Save to Argument
-  LOGS("Saving Arguments\n");
-  snprintf(currArgv[0], 255, "%s", argv[1]);
-  snprintf(currArgv[1], 255, "%s", argv[3]);
   //* Init Pipe & Show Splash Info
-  a_splash(argv[2]);
+  a_splash();
   //* Init Zip
   LOGS("Open Archive\n");
   
-  if (az_init(argv[3])) {
+  if (az_init("/", 1)) {
     //* Initializing All Resources
     LOGS("Initializing Resource\n");
     a_init_all();
-    
-    //* Mute Parent Thread
-    if (parent_pid) {
-      LOGS("Mute Parent\n");
-      aroma_memory_parentpid(parent_pid);
-      kill(parent_pid, 19);
-    }
     
     //* Starting AROMA FILEMANAGER UI
     LOGS("Starting Interface\n");
@@ -167,12 +132,6 @@ int main(int argc, char ** argv) {
     LOGS("Starting Release\n");
     a_release_all();
     
-    //* Unmute Parent
-    if (parent_pid) {
-      LOGS("Unmute Parent\n");
-      kill(parent_pid, 18);
-    }
-    
     //* Wait Until Clean Up
     usleep(200000);
   }
@@ -184,9 +143,7 @@ int main(int argc, char ** argv) {
   LOGS("Cleanup Temporary\n");
   usleep(500000);
   remove_directory(AROMA_TMP);
-  //* Cleanup PIPE
-  LOGS("Closing Recovery Pipe\n");
-  fclose(acmd_pipe);
+
   //* MEMORY DEBUG
 #ifndef _AROMA_NODEBUG
   aroma_dump_malloc();
