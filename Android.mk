@@ -50,7 +50,7 @@ LOCAL_SRC_FILES += \
     src/main/aroma_ui.c
 
 ## MODULE SETTINGS
-LOCAL_MODULE                  := aroma_filemanager
+LOCAL_MODULE                  := aroma_recovery
 LOCAL_MODULE_TAGS             := eng
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 
